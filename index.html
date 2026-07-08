@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physics Simulators Hub</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: #0b0f19;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #e2e8f0;
+            line-height: 1.6;
+            position: relative;
+        }
+
+        /* Language Toggle Button */
+        #lang-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #1e293b;
+            color: #38bdf8;
+            border: 1px solid #38bdf8;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            z-index: 100;
+        }
+
+        #lang-toggle:hover {
+            background: #38bdf8;
+            color: #0b0f19;
+        }
+
+        header {
+            background: #0f172a;
+            padding: 40px 20px;
+            text-align: center;
+            border-bottom: 1px solid #334155;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            color: #38bdf8;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        p.subtitle {
+            color: #94a3b8;
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 15px auto 0;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 20px;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.2s, border-color 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: #38bdf8;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            margin: 0 0 10px 0;
+            color: #f8fafc;
+            font-size: 1.4rem;
+        }
+
+        .card p {
+            margin: 0 0 15px 0;
+            color: #94a3b8;
+            font-size: 0.95rem;
+            flex-grow: 1;
+        }
+
+        .card .btn {
+            background: #0ea5e9;
+            color: #fff;
+            padding: 10px;
+            text-align: center;
+            border-radius: 4px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .card:hover .btn {
+            background: #38bdf8;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="lang-toggle" onclick="toggleLanguage()">繁體中文</button>
+
+    <header>
+        <h1 data-i18n="site_title">Physics Simulators Hub</h1>
+        <p class="subtitle" data-i18n="site_subtitle">Interactive simulations for visualizing complex physics concepts.</p>
+    </header>
+
+    <div class="container">
+        <!-- Card for Lenz's Law -->
+        <a href="lenz-law.html" class="card">
+            <h2 data-i18n="card1_title">Lenz's Law</h2>
+            <p data-i18n="card1_desc">An interactive simulation demonstrating how induced current creates a magnetic field that opposes the change in magnetic flux.</p>
+            <div class="btn" data-i18n="launch_btn">Launch Simulator</div>
+        </a>
+
+        <!-- Card for your existing simulator -->
+        <a href="circuit.html" class="card">
+            <h2 data-i18n="card2_title">Your Other Simulator</h2>
+            <p data-i18n="card2_desc">Description of your other physics simulator goes here.</p>
+            <div class="btn" data-i18n="launch_btn">Launch Simulator</div>
+        </a>
+    </div>
+
+    <script>
+        const translations = {
+            en: {
+                site_title: "Physics Simulators Hub",
+                site_subtitle: "Interactive simulations for visualizing complex physics concepts.",
+                card1_title: "Lenz's Law",
+                card1_desc: "An interactive simulation demonstrating how induced current creates a magnetic field that opposes the change in magnetic flux.",
+                card2_title: "Circuit",
+                card2_desc: "An interactive simulation constructing circuit.",
+                launch_btn: "Launch Simulator",
+                toggle_btn: "繁體中文"
+            },
+            zh: {
+                site_title: "物理模擬器中心",
+                site_subtitle: "用於視覺化複雜物理概念的互動式模擬器。",
+                card1_title: "楞次定律 (Lenz's Law)",
+                card1_desc: "一個互動式模擬器，展示感應電流如何產生磁場以反抗磁通量的變化。",
+                card2_title: "電路",
+                card2_desc: "一個互動式模擬器，構建電路。",
+                launch_btn: "啟動模擬器",
+                toggle_btn: "English"
+            }
+        };
+
+        // Check local storage for language, default to English
+        let currentLang = localStorage.getItem('sim_lang') || 'en';
+
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[currentLang][key]) {
+                    el.innerHTML = translations[currentLang][key];
+                }
+            });
+            document.getElementById('lang-toggle').innerText = translations[currentLang].toggle_btn;
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'en' ? 'zh' : 'en';
+            localStorage.setItem('sim_lang', currentLang);
+            applyTranslations();
+        }
+
+        // Apply translations on load
+        applyTranslations();
+    </script>
+</body>
+</html>

@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電路拓樸與等效變形模擬器</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: "Microsoft JhengHei", sans-serif; background-color: #121212; color: #eee; display: flex; }
+        
+        #toolbar {
+            width: 320px;
+            background: #1e1e1e;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .header { padding: 15px; background: #252525; border-bottom: 2px solid #0078d7; text-align: center; }
+        .header h2 { margin: 0; font-size: 18px; color: #0078d7; letter-spacing: 1px; }
+        .header p { margin: 5px 0 0 0; font-size: 12px; color: #888; }
+        .lang-btn { margin-top: 10px; background: #444; color: white; border: 1px solid #666; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; width: 100%; transition: 0.2s; }
+        .lang-btn:hover { background: #555; }
+
+        .panel { padding: 15px; border-bottom: 1px solid #333; }
+        .panel-title { font-size: 14px; color: #aaa; margin-bottom: 10px; font-weight: bold; }
+
+        .btn {
+            display: block; width: 100%; padding: 10px; margin-bottom: 8px;
+            background: #333; color: white; border: 1px solid #444; border-radius: 4px;
+            cursor: pointer; text-align: left; font-size: 14px; transition: 0.2s;
+        }
+        .btn:hover { background: #444; }
+        .btn.active { background: #0078d7; border-color: #0078d7; font-weight: bold; }
+
+        #props-panel { display: none; background: #2a2a2a; border-radius: 6px; padding: 10px; margin-top: 10px; }
+        .prop-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .prop-row label { font-size: 13px; color: #ccc; }
+        .prop-row input { width: 80px; background: #111; color: white; border: 1px solid #555; padding: 4px; border-radius: 3px; }
+        .delete-btn { background: #c0392b; color: white; border: none; padding: 6px; width: 100%; border-radius: 4px; cursor: pointer; margin-top: 5px; }
+        .delete-btn:hover { background: #e74c3c; }
+
+        #canvas-container { flex: 1; position: relative; cursor: crosshair; }
+        canvas { display: block; }
+        
+        #tooltip {
+            position: absolute; bottom: 20px; right: 20px;
+            background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;
+            font-size: 13px; color: #ccc; pointer-events: none; border: 1px solid #444;
+        }
+        .color-scale { display: flex; align-items: center; margin-top: 10px; }
+        .color-bar { flex: 1; height: 10px; background: linear-gradient(90deg, #0044ff, #8800ff, #ff0044); margin: 0 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="toolbar">
+    <div class="header">
+        <h2 id="ui-title">⚡ 電路拓樸重組模擬器</h2>
+        <p id="ui-subtitle">拖曳節點來展開複雜電路</p>
+        <button class="lang-btn" onclick="toggleLang()">🌐 Switch to English / 切換至英文</button>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title" id="panel-mode-title">模式選擇 (操作說明)</div>
+        <button class="btn active" id="mode-select" onclick="setMode('select')">👆 選取 / 拖曳節點</button>
+        <button class="btn" id="mode-node" onclick="setMode('node')">🟢 新增節點 (點電線/元件腳可折彎)</button>
+        
+        <div class="panel-title" id="panel-add-title" style="margin-top: 15px;">新增元件 (點擊兩個節點連接)</div>
+        <button class="btn" id="mode-wire" onclick="setMode('wire')">➖ 電線 (Wire)</button>
+        <button class="btn" id="mode-resistor" onclick="setMode('resistor')">〰️ 電阻 (Resistor)</button>
+        <button class="btn" id="mode-battery" onclick="setMode('battery')">🔋 電池 (Battery) [+到-]</button>
+        <button class="btn" id="mode-ammeter" onclick="setMode('ammeter')">Ⓐ 安培計 (Ammeter)</button>
+        <button class="btn" id="mode-voltmeter" onclick="setMode('voltmeter')">Ⓥ 伏特計 (Voltmeter)</button>
+        
+        <button class="btn" id="clear-btn" onclick="clearAll()" style="background:#8b0000; margin-top: 15px; text-align:center;">🗑️ 清空畫布</button>
+    </div>
+
+    <div class="panel" id="props-panel">
+        <div class="panel-title" id="panel-props-title">元件屬性</div>
+        <div id="prop-content"></div>
+        <button class="delete-btn" id="del-btn" onclick="deleteSelected()">刪除選定項目</button>
+    </div>
+</div>
+
+<div id="canvas-container">
+    <canvas id="circuitCanvas"></canvas>
+    <div id="tooltip">
+        <strong id="tip-title">操作提示：</strong><br>
+        <span id="tip-1">1. 點擊「新增節點」在畫布上放置連接點。</span><br>
+        <span id="tip-2">2. 在「新增節點」模式下點擊現有電線或元件延伸線，可將其拆分以製造彎折。</span><br>
+        <span id="tip-3">3. 切換回「選取/拖曳」來隨意拉扯電路排版。</span><br>
+        <div class="color-scale">
+            <span>0V</span>
+            <div class="color-bar"></div>
+            <span id="max-v-label">Max V</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 多語系支援 (i18n) ---
+    let currentLang = 'zh';
+    const texts = {
+        zh: {
+            title: "⚡ 電路拓樸重組模擬器",
+            subtitle: "拖曳節點來展開複雜電路",
+            langBtn: "🌐 Switch to English",
+            modeSelect: "👆 選取 / 拖曳節點",
+            modeNode: "🟢 新增節點 (點電線/元件腳可折彎)",
+            modeWire: "➖ 電線 (Wire)",
+            modeResistor: "〰️ 電阻 (Resistor)",
+            modeBattery: "🔋 電池 (Battery) [+到-]",
+            modeAmmeter: "Ⓐ 安培計 (Ammeter)",
+            modeVoltmeter: "Ⓥ 伏特計 (Voltmeter)",
+            clearAll: "🗑️ 清空畫布",
+            panelMode: "模式選擇 (操作說明)",
+            panelAdd: "新增元件 (點擊兩個節點連接)",
+            panelProps: "元件屬性",
+            delBtn: "刪除選定項目",
+            tooltipTitle: "操作提示：",
+            tip1: "1. 點擊「新增節點」在畫布上放置連接點。",
+            tip2: "2. 在「新增節點」模式下點擊現有電線或元件延伸線，可將其拆分以製造彎折。",
+            tip3: "3. 切換回「選取/拖曳」來隨意拉扯電路排版。",
+            typeBattery: "電池", typeResistor: "電阻", typeAmmeter: "安培計", typeVoltmeter: "伏特計", typeWire: "電線",
+            propVoltage: "電壓 (V)", propResistance: "電阻 (Ω)", propWireVal: "理想電線無可調參數",
+            currVoltage: "⚡ 目前節點電壓", typeLabel: "類型:"
+        },
+        en: {
+            title: "⚡ Circuit Topology Sim",
+            subtitle: "Drag nodes to untangle circuits",
+            langBtn: "🌐 切換至中文",
+            modeSelect: "👆 Select / Drag Nodes",
+            modeNode: "🟢 Add Node (Click lines to bend)",
+            modeWire: "➖ Wire",
+            modeResistor: "〰️ Resistor",
+            modeBattery: "🔋 Battery [+ to -]",
+            modeAmmeter: "Ⓐ Ammeter",
+            modeVoltmeter: "Ⓥ Voltmeter",
+            clearAll: "🗑️ Clear Canvas",
+            panelMode: "Mode Selection",
+            panelAdd: "Add Components (Click 2 nodes)",
+            panelProps: "Properties",
+            delBtn: "Delete Selected",
+            tooltipTitle: "Instructions:",
+            tip1: "1. Click 'Add Node' to place connection points.",
+            tip2: "2. In 'Add Node' mode, click any wire or component leg to split and bend it.",
+            tip3: "3. Switch to 'Select/Drag' to reposition nodes.",
+            typeBattery: "Battery", typeResistor: "Resistor", typeAmmeter: "Ammeter", typeVoltmeter: "Voltmeter", typeWire: "Wire",
+            propVoltage: "Voltage (V)", propResistance: "Resistance (Ω)", propWireVal: "Ideal wire has no parameters",
+            currVoltage: "⚡ Node Voltage", typeLabel: "Type:"
+        }
+    };
+
+    function updateLanguage() {
+        let t = texts[currentLang];
+        document.getElementById('ui-title').innerText = t.title;
+        document.getElementById('ui-subtitle').innerText = t.subtitle;
+        document.querySelector('.lang-btn').innerText = t.langBtn;
+        document.getElementById('mode-select').innerText = t.modeSelect;
+        document.getElementById('mode-node').innerText = t.modeNode;
+        document.getElementById('mode-wire').innerText = t.modeWire;
+        document.getElementById('mode-resistor').innerText = t.modeResistor;
+        document.getElementById('mode-battery').innerText = t.modeBattery;
+        document.getElementById('mode-ammeter').innerText = t.modeAmmeter;
+        document.getElementById('mode-voltmeter').innerText = t.modeVoltmeter;
+        document.getElementById('clear-btn').innerText = t.clearAll;
+        document.getElementById('panel-mode-title').innerText = t.panelMode;
+        document.getElementById('panel-add-title').innerText = t.panelAdd;
+        document.getElementById('panel-props-title').innerText = t.panelProps;
+        document.getElementById('del-btn').innerText = t.delBtn;
+        document.getElementById('tip-title').innerText = t.tooltipTitle;
+        document.getElementById('tip-1').innerText = t.tip1;
+        document.getElementById('tip-2').innerText = t.tip2;
+        document.getElementById('tip-3').innerText = t.tip3;
+        if(selectedItem) showProps(selectedItem);
+    }
+
+    function toggleLang() {
+        currentLang = currentLang === 'zh' ? 'en' : 'zh';
+        updateLanguage();
+    }
+
+    const canvas = document.getElementById('circuitCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+
+    function resize() {
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+        render();
+    }
+    window.addEventListener('resize', resize);
+
+    let nodes = [];
+    let components = [];
+    let nextNodeId = 0;
+    let nextCompId = 0;
+
+    let currentMode = 'select';
+    let selectedItem = null; 
+    let draggingNode = null;
+    let firstNodeForComp = null; 
+
+    let maxVoltage = 0;
+    let minVoltage = 0;
+
+    const DEFAULTS = {
+        resistor: { R: 10 },
+        battery: { V: 9 },
+        ammeter: { R: 0.001 }, 
+        voltmeter: { R: 1e9 }, 
+        wire: { R: 1e-5 }      
+    };
+
+    function setMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('mode-' + mode).classList.add('active');
+        firstNodeForComp = null;
+        selectedItem = null;
+        hideProps();
+        render();
+    }
+
+    // --- MNA 數學引擎 ---
+    function solveCircuit() {
+        if (nodes.length === 0) return;
+        nodes.forEach(n => n.voltage = 0);
+        components.forEach(c => c.current = 0);
+
+        const n = nodes.length;
+        let G = Array.from({ length: n }, () => Array(n).fill(0));
+        let I = Array(n).fill(0);
+
+        components.forEach(comp => {
+            let i = nodes.indexOf(comp.n1);
+            let j = nodes.indexOf(comp.n2);
+            let R = comp.R;
+            
+            if (comp.type === 'battery') {
+                let r_s = 1e-5; 
+                let g_s = 1 / r_s;
+                let i_n = comp.V * g_s;
+                G[i][i] += g_s; G[j][j] += g_s;
+                G[i][j] -= g_s; G[j][i] -= g_s;
+                I[i] += i_n; I[j] -= i_n; 
+            } else {
+                let g = 1 / R;
+                G[i][i] += g; G[j][j] += g;
+                G[i][j] -= g; G[j][i] -= g;
+            }
+        });
+
+        for(let i=0; i<n; i++) G[i][i] += 1e-9;
+        for(let j=0; j<n; j++) G[0][j] = (j === 0) ? 1 : 0;
+        I[0] = 0;
+
+        let V = gaussianElimination(G, I);
+        let localMin = Math.min(...V);
+        for(let i=0; i<n; i++) V[i] -= localMin;
+
+        maxVoltage = 0.001; 
+        nodes.forEach((node, idx) => {
+            node.voltage = V[idx];
+            if (node.voltage > maxVoltage) maxVoltage = node.voltage;
+        });
+
+        components.forEach(comp => {
+            if (comp.type === 'battery') {
+                comp.current = (comp.n1.voltage - comp.n2.voltage - comp.V) / 1e-5;
+            } else {
+                comp.current = (comp.n1.voltage - comp.n2.voltage) / comp.R;
+            }
+        });
+
+        document.getElementById('max-v-label').innerText = maxVoltage.toFixed(1) + "V";
+    }
+
+    function gaussianElimination(A, b) {
+        let n = A.length;
+        for (let i = 0; i < n; i++) {
+            let maxEl = Math.abs(A[i][i]), maxRow = i;
+            for (let k = i + 1; k < n; k++) {
+                if (Math.abs(A[k][i]) > maxEl) { maxEl = Math.abs(A[k][i]); maxRow = k; }
+            }
+            for (let k = i; k < n; k++) { let tmp = A[maxRow][k]; A[maxRow][k] = A[i][k]; A[i][k] = tmp; }
+            let tmp = b[maxRow]; b[maxRow] = b[i]; b[i] = tmp;
+            for (let k = i + 1; k < n; k++) {
+                let c = -A[k][i] / A[i][i];
+                for (let j = i; j < n; j++) {
+                    if (i === j) A[k][j] = 0; else A[k][j] += c * A[i][j];
+                }
+                b[k] += c * b[i];
+            }
+        }
+        let x = new Array(n).fill(0);
+        for (let i = n - 1; i >= 0; i--) {
+            x[i] = b[i] / A[i][i];
+            for (let k = i - 1; k >= 0; k--) { b[k] -= A[k][i] * x[i]; }
+        }
+        return x;
+    }
+
+    function getVoltageColor(v) {
+        if (maxVoltage <= 0.01) return "#555555"; 
+        let ratio = v / maxVoltage;
+        ratio = Math.max(0, Math.min(1, ratio));
+        let r = Math.floor(255 * ratio);
+        let b = Math.floor(255 * (1 - ratio));
+        let g = Math.floor(0); 
+        if(ratio > 0.4 && ratio < 0.6) g = 50; 
+        return `rgb(${r},${g},${b})`;
+    }
+
+    // --- 繪製邏輯 ---
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.strokeStyle = "#222";
+        ctx.lineWidth = 1;
+        for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+        for(let i=0; i<canvas.height; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
+
+        solveCircuit();
+
+        components.forEach(comp => {
+            let x1 = comp.n1.x, y1 = comp.n1.y;
+            let x2 = comp.n2.x, y2 = comp.n2.y;
+            let cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+            let angle = Math.atan2(y2 - y1, x2 - x1);
+            let dist = Math.hypot(x2-x1, y2-y1);
+
+            let color1 = getVoltageColor(comp.n1.voltage);
+            let color2 = getVoltageColor(comp.n2.voltage);
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
+
+            let symbolWidth = 30; 
+
+            if (comp.type === 'wire') {
+                let grad = ctx.createLinearGradient(-dist/2, 0, dist/2, 0);
+                grad.addColorStop(0, color1);
+                grad.addColorStop(1, color2);
+                ctx.strokeStyle = (selectedItem === comp) ? "#fff" : grad;
+                ctx.lineWidth = (selectedItem === comp) ? 5 : 3;
+                ctx.beginPath();
+                ctx.moveTo(-dist/2, 0); ctx.lineTo(dist/2, 0);
+                ctx.stroke();
+            } else {
+                ctx.lineWidth = (selectedItem === comp) ? 5 : 3;
+                let halfSym = symbolWidth / 2;
+
+                ctx.strokeStyle = (selectedItem === comp) ? "#fff" : color1;
+                ctx.beginPath(); ctx.moveTo(-dist/2, 0); ctx.lineTo(-halfSym, 0); ctx.stroke();
+
+                ctx.strokeStyle = (selectedItem === comp) ? "#fff" : color2;
+                ctx.beginPath(); ctx.moveTo(halfSym, 0); ctx.lineTo(dist/2, 0); ctx.stroke();
+
+                if (comp.type === 'resistor') {
+                    let gradR = ctx.createLinearGradient(-halfSym, 0, halfSym, 0);
+                    gradR.addColorStop(0, color1); gradR.addColorStop(1, color2);
+                    ctx.strokeStyle = (selectedItem === comp) ? "#fff" : gradR;
+
+                    ctx.beginPath();
+                    let step = symbolWidth / 6;
+                    ctx.moveTo(-halfSym, 0);
+                    ctx.lineTo(-step*2, -10); ctx.lineTo(-step, 10);
+                    ctx.lineTo(0, -10); ctx.lineTo(step, 10);
+                    ctx.lineTo(step*2, -10); ctx.lineTo(halfSym, 0);
+                    ctx.stroke();
+                    
+                    ctx.rotate(-angle);
+                    ctx.fillStyle = "#fff"; ctx.font = "12px Arial";
+                    ctx.fillText(comp.R + " Ω", -15, -15);
+                } else if (comp.type === 'battery') {
+                    ctx.strokeStyle = "#ff4444"; 
+                    ctx.beginPath(); ctx.moveTo(-5, -15); ctx.lineTo(-5, 15); ctx.stroke(); 
+                    ctx.strokeStyle = "#4444ff"; 
+                    ctx.beginPath(); ctx.moveTo(5, -8); ctx.lineTo(5, 8); ctx.lineWidth=4; ctx.stroke();   
+                    
+                    ctx.rotate(-angle);
+                    ctx.fillStyle = "#fff"; ctx.font = "12px Arial";
+                    ctx.fillText(comp.V + " V", -15, -20);
+                } else if (comp.type === 'ammeter' || comp.type === 'voltmeter') {
+                    let gradM = ctx.createLinearGradient(-15, 0, 15, 0);
+                    gradM.addColorStop(0, color1); gradM.addColorStop(1, color2);
+
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 15, 0, Math.PI*2);
+                    ctx.fillStyle = "#222"; ctx.fill();
+                    ctx.strokeStyle = (selectedItem === comp) ? "#fff" : gradM;
+                    ctx.lineWidth = 2; ctx.stroke();
+                    
+                    ctx.rotate(-angle); 
+                    ctx.fillStyle = (comp.type === 'ammeter') ? "#ff8800" : "#00ffcc";
+                    ctx.font = "bold 16px Arial";
+                    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                    ctx.fillText(comp.type === 'ammeter' ? "A" : "V", 0, 0);
+                    
+                    ctx.fillStyle = "#fff"; ctx.font = "12px Arial";
+                    if(comp.type === 'ammeter') {
+                        ctx.fillText(Math.abs(comp.current).toFixed(2) + " A", 0, -25);
+                    } else {
+                        let vDiff = Math.abs(comp.n1.voltage - comp.n2.voltage);
+                        ctx.fillText(vDiff.toFixed(2) + " V", 0, -25);
+                    }
+                }
+            }
+            ctx.restore();
+        });
+
+        nodes.forEach(node => {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, (selectedItem === node || firstNodeForComp === node) ? 10 : 6, 0, Math.PI * 2);
+            ctx.fillStyle = getVoltageColor(node.voltage);
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = (selectedItem === node || firstNodeForComp === node) ? "#fff" : "#000";
+            ctx.stroke();
+            
+            if (node.voltage > 0.01) {
+                ctx.fillStyle = "#ccc"; ctx.font = "11px Arial";
+                ctx.fillText(node.voltage.toFixed(1) + "V", node.x + 10, node.y - 10);
+            }
+        });
+
+        if (firstNodeForComp && mousePos) {
+            ctx.beginPath();
+            ctx.moveTo(firstNodeForComp.x, firstNodeForComp.y);
+            ctx.lineTo(mousePos.x, mousePos.y);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    }
+
+    // --- 互動邏輯 ---
+    let mousePos = null;
+
+    canvas.addEventListener('mousemove', (e) => {
+        let rect = canvas.getBoundingClientRect();
+        mousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+        if (draggingNode) {
+            draggingNode.x = mousePos.x;
+            draggingNode.y = mousePos.y;
+            render();
+        } else if (firstNodeForComp) {
+            render(); 
+        }
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+        let rect = canvas.getBoundingClientRect();
+        let mx = e.clientX - rect.left;
+        let my = e.clientY - rect.top;
+
+        let clickedNode = nodes.find(n => Math.hypot(n.x - mx, n.y - my) < 15);
+
+        // 新增節點模式 (任意元件接腳拆解邏輯)
+        if (currentMode === 'node') {
+            if (!clickedNode) {
+                // 檢查是否點到現有「任意元件」的延伸線上
+                let clickedComp = components.find(c => distToSegment({x:mx, y:my}, c.n1, c.n2) < 10);
+                
+                let newNode = { id: nextNodeId++, x: mx, y: my, voltage: 0 };
+                nodes.push(newNode);
+
+                if (clickedComp) {
+                    // 計算點擊位置離哪一個節點比較近，決定把新電線接在哪一頭
+                    let distToN1 = Math.hypot(mx - clickedComp.n1.x, my - clickedComp.n1.y);
+                    let distToN2 = Math.hypot(mx - clickedComp.n2.x, my - clickedComp.n2.y);
+
+                    if (distToN1 < distToN2) {
+                        // 離 n1 較近：新增的電線接在 n1 和 newNode 之間，原元件縮減到 newNode 和 n2 之間
+                        let oldN1 = clickedComp.n1;
+                        clickedComp.n1 = newNode; 
+                        components.push({
+                            id: nextCompId++, type: 'wire', n1: oldN1, n2: newNode, R: DEFAULTS.wire.R, current: 0
+                        });
+                    } else {
+                        // 離 n2 較近：新增的電線接在 newNode 和 n2 之間，原元件縮減到 n1 和 newNode 之間
+                        let oldN2 = clickedComp.n2;
+                        clickedComp.n2 = newNode; 
+                        components.push({
+                            id: nextCompId++, type: 'wire', n1: newNode, n2: oldN2, R: DEFAULTS.wire.R, current: 0
+                        });
+                    }
+                }
+                render();
+            }
+            return;
+        }
+
+        if (currentMode === 'select') {
+            if (clickedNode) {
+                draggingNode = clickedNode;
+                selectedItem = clickedNode;
+                showProps(clickedNode);
+            } else {
+                let clickedComp = components.find(c => {
+                    let d = distToSegment({x:mx, y:my}, c.n1, c.n2);
+                    return d < 15;
+                });
+                selectedItem = clickedComp || null;
+                showProps(selectedItem);
+            }
+            render();
+            return;
+        }
+
+        if (clickedNode) {
+            if (!firstNodeForComp) {
+                firstNodeForComp = clickedNode;
+            } else {
+                if (firstNodeForComp !== clickedNode) {
+                    let newComp = { id: nextCompId++, type: currentMode, n1: firstNodeForComp, n2: clickedNode, current: 0 };
+                    
+                    if (currentMode === 'resistor') newComp.R = DEFAULTS.resistor.R;
+                    if (currentMode === 'wire') newComp.R = DEFAULTS.wire.R;
+                    if (currentMode === 'battery') newComp.V = DEFAULTS.battery.V;
+                    if (currentMode === 'ammeter') newComp.R = DEFAULTS.ammeter.R;
+                    if (currentMode === 'voltmeter') newComp.R = DEFAULTS.voltmeter.R;
+
+                    components.push(newComp);
+                }
+                firstNodeForComp = null;
+                render();
+            }
+        }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+        draggingNode = null;
+    });
+
+    function distToSegment(p, v, w) {
+        let l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
+        if (l2 == 0) return Math.hypot(p.x - v.x, p.y - v.y);
+        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
+    }
+
+    // --- 屬性面板 ---
+    function showProps(item) {
+        const panel = document.getElementById('props-panel');
+        const content = document.getElementById('prop-content');
+        if (!item) { panel.style.display = 'none'; return; }
+        
+        panel.style.display = 'block';
+        content.innerHTML = '';
+
+        let t = texts[currentLang];
+
+        if (item.voltage !== undefined) {
+            content.innerHTML = `<div style="color:#00ffcc; font-size:13px; margin-bottom:10px;">${t.currVoltage}: ${item.voltage.toFixed(3)} V</div>`;
+            return; 
+        }
+
+        let typeStr = item.type === 'battery' ? t.typeBattery : 
+                      item.type === 'resistor' ? t.typeResistor : 
+                      item.type === 'ammeter' ? t.typeAmmeter :
+                      item.type === 'voltmeter' ? t.typeVoltmeter : t.typeWire;
+        
+        let html = `<div style="color:#aaa; font-size:13px; margin-bottom:10px;">${t.typeLabel} ${typeStr}</div>`;
+
+        if (item.type === 'battery') {
+            html += `<div class="prop-row"><label>${t.propVoltage}</label><input type="number" id="edit-val" value="${item.V}"></div>`;
+        } else if (item.type !== 'wire') {
+            let displayR = item.R > 1e8 ? 'Infinity' : item.R;
+            html += `<div class="prop-row"><label>${t.propResistance}</label><input type="text" id="edit-val" value="${displayR}"></div>`;
+        } else {
+            html += `<div style="color:#888; font-size:12px;">${t.propWireVal}</div>`;
+        }
+
+        content.innerHTML = html;
+
+        let input = document.getElementById('edit-val');
+        if(input) {
+            input.addEventListener('change', (e) => {
+                let val = e.target.value;
+                if (item.type === 'battery') {
+                    item.V = parseFloat(val) || 0;
+                } else {
+                    if (val.toLowerCase() === 'infinity' || val === 'inf') item.R = 1e9;
+                    else item.R = parseFloat(val) || 1e-5;
+                }
+                render();
+            });
+        }
+    }
+
+    function hideProps() { document.getElementById('props-panel').style.display = 'none'; }
+
+    window.deleteSelected = function() {
+        if (!selectedItem) return;
+        if (selectedItem.voltage !== undefined) {
+            components = components.filter(c => c.n1 !== selectedItem && c.n2 !== selectedItem);
+            nodes = nodes.filter(n => n !== selectedItem);
+        } else {
+            components = components.filter(c => c !== selectedItem);
+        }
+        selectedItem = null;
+        hideProps();
+        render();
+    }
+
+    window.clearAll = function() {
+        nodes = []; components = []; selectedItem = null; firstNodeForComp = null;
+        hideProps(); render();
+    }
+
+    resize();
+</script>
+</body>
+</html>

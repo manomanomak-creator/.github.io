@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lenz's Law Interactive Simulator</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0f19;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #e2e8f0;
+            user-select: none;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Language Toggle Button */
+        #lang-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #1e293b;
+            color: #38bdf8;
+            border: 1px solid #38bdf8;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            z-index: 100;
+        }
+
+        #lang-toggle:hover {
+            background: #38bdf8;
+            color: #0b0f19;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            pointer-events: none;
+            max-width: 400px;
+        }
+
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 1.8rem;
+            color: #38bdf8;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        p {
+            margin: 0 0 15px 0;
+            font-size: 0.95rem;
+            color: #94a3b8;
+            line-height: 1.4;
+        }
+
+        .dashboard {
+            background: rgba(15, 23, 42, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            backdrop-filter: blur(4px);
+            pointer-events: auto;
+        }
+
+        .meter-container {
+            margin-top: 10px;
+        }
+
+        .meter-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+            font-weight: bold;
+        }
+
+        .meter-bar-outer {
+            width: 100%;
+            height: 12px;
+            background: #1e293b;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #475569;
+        }
+
+        #current-bar {
+            height: 100%;
+            width: 50%;
+            background: #10b981;
+            position: absolute;
+            left: 50%;
+            transition: width 0.05s ease, left 0.05s ease;
+        }
+
+        #status-text {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #fbbf24;
+        }
+
+        .instructions {
+            margin-top: 15px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            border-top: 1px solid #334155;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="lang-toggle" onclick="toggleLanguage()">繁體中文</button>
+
+    <div id="ui-container">
+        <div class="dashboard">
+            <h1 data-i18n="sim_title">Lenz's Law Simulator</h1>
+            <p data-i18n="sim_desc">An induced electromotive force always generates a current whose magnetic field opposes the original change in magnetic flux.</p>
+            
+            <div class="meter-container">
+                <div class="meter-label">
+                    <span data-i18n="meter_label">Induced Current (I)</span>
+                    <span id="current-value">0.00 A</span>
+                </div>
+                <div class="meter-bar-outer">
+                    <div id="current-bar"></div>
+                </div>
+            </div>
+
+            <div id="status-text">System Stable (No Flux Change)</div>
+
+            <div class="instructions" data-i18n="instructions">
+                <strong>Controls:</strong><br>
+                • Click & Drag the <b>Bar Magnet</b><br>
+                • Click & Drag the <b>Coil</b><br>
+                • Move either object to observe induction.
+            </div>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        // --- Translations ---
+        const translations = {
+            en: {
+                sim_title: "Lenz's Law Simulator",
+                sim_desc: "An induced electromotive force always generates a current whose magnetic field opposes the original change in magnetic flux.",
+                meter_label: "Induced Current (I)",
+                instructions: "<strong>Controls:</strong><br>• Click & Drag the <b>Bar Magnet</b><br>• Click & Drag the <b>Coil</b><br>• Move either object to observe induction.",
+                toggle_btn: "繁體中文",
+                status_repel: "➔ Magnet Approaching: Induced N-Pole REPELS changes!",
+                status_attract: "➔ Magnet Retracting: Induced S-Pole ATTRACTS to maintain flux!",
+                status_stable: "System Stable (No Flux Change)",
+                canvas_n_right: "Induced N ➔",
+                canvas_s_left: "➔ Induced S",
+                canvas_s_right: "Induced S ➔",
+                canvas_n_left: "➔ Induced N"
+            },
+            zh: {
+                sim_title: "楞次定律模擬器",
+                sim_desc: "感應電動勢總是產生一個電流，其磁場反抗引起該電動勢的磁通量變化。",
+                meter_label: "感應電流 (I)",
+                instructions: "<strong>操作說明：</strong><br>• 點擊並拖曳 <b>條形磁鐵</b><br>• 點擊並拖曳 <b>線圈</b><br>• 移動任一物件以觀察電磁感應。",
+                toggle_btn: "English",
+                status_repel: "➔ 磁鐵靠近：感應出 N 極以排斥變化！",
+                status_attract: "➔ 磁鐵遠離：感應出 S 極以吸引並維持磁通量！",
+                status_stable: "系統穩定 (無磁通量變化)",
+                canvas_n_right: "感應 N 極 ➔",
+                canvas_s_left: "➔ 感應 S 極",
+                canvas_s_right: "感應 S 極 ➔",
+                canvas_n_left: "➔ 感應 N 極"
+            }
+        };
+
+        let currentLang = localStorage.getItem('sim_lang') || 'en';
+
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[currentLang][key]) {
+                    el.innerHTML = translations[currentLang][key];
+                }
+            });
+            document.getElementById('lang-toggle').innerText = translations[currentLang].toggle_btn;
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'en' ? 'zh' : 'en';
+            localStorage.setItem('sim_lang', currentLang);
+            applyTranslations();
+        }
+
+        applyTranslations();
+
+
+        // --- Simulator Logic ---
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const currentBar = document.getElementById('current-bar');
+        const currentValueText = document.getElementById('current-value');
+        const statusText = document.getElementById('status-text');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const magnet = {
+            x: window.innerWidth * 0.25,
+            y: window.innerHeight * 0.5,
+            width: 160,
+            height: 50,
+            isDragging: false,
+            getNorthPole() { return { x: this.x + this.width / 2, y: this.y }; },
+            getSouthPole() { return { x: this.x - this.width / 2, y: this.y }; }
+        };
+
+        const coil = {
+            x: window.innerWidth * 0.75,
+            y: window.innerHeight * 0.5,
+            width: 40, 
+            height: 140, 
+            turns: 4,
+            isDragging: false
+        };
+
+        let previousFlux = 0;
+        let currentFlux = 0;
+        let inducedCurrent = 0; 
+        let targetCurrent = 0;
+        const sensitivity = 80000; 
+        let arrowOffset = 0; 
+
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let activeElement = null;
+
+        function getMagneticField(px, py) {
+            const N = magnet.getNorthPole();
+            const S = magnet.getSouthPole();
+
+            const dxN = px - N.x;
+            const dyN = py - N.y;
+            const rN2 = dxN * dxN + dyN * dyN + 100;
+            const rN3 = Math.pow(rN2, 1.5);
+
+            const dxS = px - S.x;
+            const dyS = py - S.y;
+            const rS2 = dxS * dxS + dyS * dyS + 100;
+            const rS3 = Math.pow(rS2, 1.5);
+
+            const bx = (dxN / rN3) - (dxS / rS3);
+            const by = (dyN / rN3) - (dyS / rS3);
+
+            return { bx, by };
+        }
+
+        function calculateFlux() {
+            let samplePoints = 3;
+            let totalB_x = 0;
+            
+            for(let i = 0; i < samplePoints; i++) {
+                let sampleX = (coil.x - coil.width/2) + (coil.width / (samplePoints - 1)) * i;
+                let field = getMagneticField(sampleX, coil.y);
+                totalB_x += field.bx;
+            }
+            
+            return totalB_x / samplePoints; 
+        }
+
+        function drawFieldLines() {
+            ctx.lineWidth = 1.5;
+            
+            const N = magnet.getNorthPole();
+            const S = magnet.getSouthPole();
+            const numLines = 28;
+            const stepSize = 12;
+            const maxSteps = 150;
+
+            let seedPoints = [];
+            for (let i = 0; i < numLines; i++) {
+                let angle = (i / numLines) * Math.PI * 2;
+                seedPoints.push({ x: N.x + Math.cos(angle)*5, y: N.y + Math.sin(angle)*5, dir: 1 });
+                seedPoints.push({ x: S.x + Math.cos(angle)*5, y: S.y + Math.sin(angle)*5, dir: -1 });
+            }
+
+            seedPoints.forEach(p => {
+                let cx = p.x;
+                let cy = p.y;
+                let points = [{x: cx, y: cy}];
+
+                for (let step = 0; step < maxSteps; step++) {
+                    let field = getMagneticField(cx, cy);
+                    let mag = Math.sqrt(field.bx * field.bx + field.by * field.by);
+                    
+                    if (mag < 0.00001) break;
+
+                    cx += (field.bx / mag) * stepSize * p.dir;
+                    cy += (field.by / mag) * stepSize * p.dir;
+
+                    points.push({x: cx, y: cy});
+
+                    if (cx < -200 || cx > canvas.width + 200 || cy < -200 || cy > canvas.height + 200) {
+                        break;
+                    }
+                }
+
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                for(let i=1; i<points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].y);
+                }
+                ctx.stroke();
+
+                for (let i = 4; i < points.length; i += 25) {
+                    let dynamicIdx = Math.floor(i + arrowOffset) % (points.length - 1);
+                    if (dynamicIdx < 1) dynamicIdx = 1;
+
+                    let p1 = points[dynamicIdx - 1];
+                    let p2 = points[dynamicIdx];
+
+                    let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                    if (p.dir === -1) angle += Math.PI; 
+
+                    ctx.fillStyle = 'rgba(14, 165, 233, 0.6)';
+                    ctx.beginPath();
+                    ctx.save();
+                    ctx.translate(p2.x, p2.y);
+                    ctx.rotate(angle);
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(-7, -4);
+                    ctx.lineTo(-5, 0);
+                    ctx.lineTo(-7, 4);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                }
+            });
+        }
+
+        function drawMagnet() {
+            ctx.save();
+            ctx.translate(magnet.x, magnet.y);
+
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+
+            ctx.fillStyle = '#1d4ed8';
+            ctx.fillRect(-magnet.width / 2, -magnet.height / 2, magnet.width / 2, magnet.height);
+            
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(0, -magnet.height / 2, magnet.width / 2, magnet.height);
+
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('S', -magnet.width / 4, 0);
+            ctx.fillText('N', magnet.width / 4, 0);
+
+            if (magnet.isDragging) {
+                ctx.strokeStyle = '#60a5fa';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-magnet.width/2, -magnet.height/2, magnet.width, magnet.height);
+            }
+
+            ctx.restore();
+        }
+
+        function drawCoil() {
+            let startX = coil.x - coil.width / 2;
+            let endX = coil.x + coil.width / 2;
+            let loopSpacing = coil.width / (coil.turns - 1);
+
+            ctx.strokeStyle = '#b45309'; 
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+
+            for (let i = 0; i < coil.turns; i++) {
+                let lx = startX + i * loopSpacing;
+                ctx.beginPath();
+                ctx.ellipse(lx, coil.y, 8, coil.height/2, 0, Math.PI*0.5, Math.PI*1.5);
+                ctx.stroke();
+            }
+
+            let copperColor = '#f59e0b'; 
+            if (inducedCurrent < -0.05) copperColor = '#10b981'; 
+            if (inducedCurrent > 0.05) copperColor = '#ec4899'; 
+            
+            ctx.strokeStyle = copperColor;
+            ctx.lineWidth = 6;
+
+            if (Math.abs(inducedCurrent) > 0.02) {
+                ctx.shadowBlur = Math.min(Math.abs(inducedCurrent) * 100, 25);
+                ctx.shadowColor = copperColor;
+            }
+
+            for (let i = 0; i < coil.turns; i++) {
+                let lx = startX + i * loopSpacing;
+                ctx.beginPath();
+                ctx.ellipse(lx, coil.y, 8, coil.height/2, 0, Math.PI*1.5, Math.PI*0.5);
+                ctx.stroke();
+
+                if (Math.abs(inducedCurrent) > 0.01) {
+                    ctx.save();
+                    ctx.shadowBlur = 0; 
+                    let t = (Date.now() * 0.005 * Math.sign(inducedCurrent)) % Math.PI;
+                    if(t < 0) t += Math.PI;
+                    
+                    let markerAngle = Math.PI * 1.5 + t; 
+                    let mx = lx + Math.cos(markerAngle) * 8;
+                    let my = coil.y + Math.sin(markerAngle) * (coil.height/2);
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(mx, my, 4, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+            ctx.shadowBlur = 0;
+
+            if (Math.abs(inducedCurrent) > 0.05) {
+                ctx.save();
+                ctx.font = 'bold 15px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                let isChinese = currentLang === 'zh';
+                let offsetAmount = isChinese ? 60 : 55; // Adjust spacing slightly for Chinese characters
+
+                if (inducedCurrent < -0.05) {
+                    ctx.fillStyle = '#dc2626'; 
+                    ctx.fillText(translations[currentLang].canvas_n_right, startX - offsetAmount, coil.y);
+                    ctx.fillStyle = '#1d4ed8'; 
+                    ctx.fillText(translations[currentLang].canvas_s_left, endX + offsetAmount, coil.y);
+                } else if (inducedCurrent > 0.05) {
+                    ctx.fillStyle = '#1d4ed8'; 
+                    ctx.fillText(translations[currentLang].canvas_s_right, startX - offsetAmount, coil.y);
+                    ctx.fillStyle = '#dc2626'; 
+                    ctx.fillText(translations[currentLang].canvas_n_left, endX + offsetAmount, coil.y);
+                }
+                ctx.restore();
+            }
+
+            if (coil.isDragging) {
+                ctx.strokeStyle = '#60a5fa';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.strokeRect(startX - 15, coil.y - coil.height/2 - 10, coil.width + 30, coil.height + 20);
+                ctx.setLineDash([]);
+            }
+        }
+
+        function isMouseOverMagnet(mx, my) {
+            return mx >= magnet.x - magnet.width / 2 &&
+                   mx <= magnet.x + magnet.width / 2 &&
+                   my >= magnet.y - magnet.height / 2 &&
+                   my <= magnet.y + magnet.height / 2;
+        }
+
+        function isMouseOverCoil(mx, my) {
+            return mx >= coil.x - coil.width / 2 - 10 &&
+                   mx <= coil.x + coil.width / 2 + 10 &&
+                   my >= coil.y - coil.height / 2 &&
+                   my <= coil.y + coil.height / 2;
+        }
+
+        function handlePointerDown(e) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (isMouseOverMagnet(clientX, clientY)) {
+                magnet.isDragging = true;
+                activeElement = magnet;
+                dragOffsetX = clientX - magnet.x;
+                dragOffsetY = clientY - magnet.y;
+            } else if (isMouseOverCoil(clientX, clientY)) {
+                coil.isDragging = true;
+                activeElement = coil;
+                dragOffsetX = clientX - coil.x;
+                dragOffsetY = clientY - coil.y;
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!activeElement) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            activeElement.x = clientX - dragOffsetX;
+            activeElement.y = clientY - dragOffsetY;
+
+            activeElement.y = Math.max(100, Math.min(canvas.height - 100, activeElement.y));
+            activeElement.x = Math.max(100, Math.min(canvas.width - 100, activeElement.x));
+        }
+
+        function handlePointerUp() {
+            if (activeElement) {
+                activeElement.isDragging = false;
+                activeElement = null;
+            }
+        }
+
+        window.addEventListener('mousedown', handlePointerDown);
+        window.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+
+        window.addEventListener('touchstart', handlePointerDown, { passive: true });
+        window.addEventListener('touchmove', handlePointerMove, { passive: true });
+        window.addEventListener('touchend', handlePointerUp);
+
+        function updateSimulation() {
+            currentFlux = calculateFlux();
+            let deltaFlux = currentFlux - previousFlux;
+            previousFlux = currentFlux;
+
+            targetCurrent = -deltaFlux * sensitivity;
+
+            inducedCurrent += (targetCurrent - inducedCurrent) * 0.15;
+            
+            arrowOffset += 0.4;
+
+            let displayCurrent = inducedCurrent;
+            if (Math.abs(displayCurrent) < 0.005) displayCurrent = 0; 
+
+            currentValueText.innerText = `${displayCurrent.toFixed(2)} A`;
+            
+            let barWidthPercentage = 50 + (displayCurrent * 15); 
+            barWidthPercentage = Math.max(0, Math.min(100, barWidthPercentage)); 
+            currentBar.style.width = `${Math.abs(50 - barWidthPercentage)}%`;
+            currentBar.style.left = `${Math.min(50, barWidthPercentage)}%`;
+
+            if (displayCurrent < -0.05) {
+                currentBar.style.backgroundColor = '#10b981';
+                statusText.innerText = translations[currentLang].status_repel;
+                statusText.style.color = '#10b981';
+            } else if (displayCurrent > 0.05) {
+                currentBar.style.backgroundColor = '#ec4899';
+                statusText.innerText = translations[currentLang].status_attract;
+                statusText.style.color = '#ec4899';
+            } else {
+                currentBar.style.backgroundColor = '#64748b';
+                statusText.innerText = translations[currentLang].status_stable;
+                statusText.style.color = '#fbbf24';
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawFieldLines();
+            drawCoil();
+            drawMagnet();
+
+            requestAnimationFrame(updateSimulation);
+        }
+
+        currentFlux = calculateFlux();
+        previousFlux = currentFlux;
+        updateSimulation();
+
+    </script>
+</body>
+</html>
